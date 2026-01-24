@@ -84,7 +84,7 @@ with st.sidebar:
 # ========================================
 
 # API Key
-API_KEY = "69724f3b18d8b1.58945206"
+API_KEY = "zF2GUU9LVP2ICuLDKJJ9SwQhkzw1TN4i"
 
 # Session state
 if 'company' not in st.session_state:
@@ -298,15 +298,15 @@ if company:
     st.markdown("### 📅 מבנה תקופות")
     
     pm = PeriodManager(company)
-    periods = pm.get_relevant_periods_order()
+    last_year = pm.identify_last_full_year()
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.info(f"🔄 **TTM:** {'מחושב מ-4 רבעונים' if periods['ttm'] else 'לא זמין'}")
+        st.info(f"🔄 **TTM:** {'מחושב מ-4 רבעונים' if company.ttm else 'לא זמין'}")
     
     with col2:
-        st.info(f"📅 **שנה מלאה אחרונה:** {periods['last_full_year'] if periods['last_full_year'] else 'לא זוהה'}")
+        st.info(f"📅 **שנה מלאה אחרונה:** {last_year if last_year else 'לא זוהה'}")
     
     with col3:
         st.info(f"📊 **רבעונים:** {len(company.quarterly_data)} | **שנים:** {len(company.annual_data)}")
