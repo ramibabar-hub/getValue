@@ -1,714 +1,570 @@
 """
-===============================================================================
-getValue Platform - Complete System (All-in-One)
-מערכת ניתוח פיננסי מלאה לפלטפורמת getValue
-
-גרסה: 1.0.0
-תאריך: ינואר 2026
-נוצר עבור: רמי
-
-כל המערכת בקובץ אחד - מוכן לשימוש!
-===============================================================================
-
-🚀 התחלה מהירה:
-
-# התקנת requirements (רק פעם אחת)
-!pip install requests
-
-# שימוש:
-manager = GetValueDataManager()
-company = manager.load_company("AAPL")  # או טקסט מאקסל
-
-===============================================================================
+getValue Platform - Streamlit App (Enhanced Simple Version)
+גרסה פשוטה + TTM דינמי + דוחות מעודכנים
 """
 
-# ===============================================================================
-# SECTION 1: IMPORTS
-# ===============================================================================
+import streamlit as st
+import pandas as pd
+from getValue_all_in_one import (
+    GetValueDataManager, 
+    PeriodManager,
+    FinancialRatios
+)
 
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple, Union
-from datetime import datetime
-from enum import Enum
-import re
-import time
-import json
-from pathlib import Path
+# ========================================
+# הגדרות עמוד
+# ========================================
 
-try:
-    import requests
-except ImportError:
-    print("⚠️  Installing requests...")
-    import subprocess
-    subprocess.check_call(['pip', 'install', 'requests'])
-    import requests
+st.set_page_config(
+    page_title="getValue - Financial Analysis",
+    page_icon="📊",
+    layout="wide"
+)
 
+# CSS פשוט
+st.markdown("""
+<style>
+    .main-title {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .metric-box {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #1f77b4;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# ===============================================================================
-# SECTION 2: FINANCIAL MODELS (מבני נתונים)
-# ===============================================================================
+# ========================================
+# כותרת
+# ========================================
 
-class PeriodType(Enum):
-    """סוג תקופה"""
-    TTM = "TTM"
-    QUARTERLY = "Q"
-    ANNUAL = "Y"
+st.markdown('<h1 class="main-title">📊 getValue - ניתוח פיננסי</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align: center; color: #666; font-size: 1.1rem;">מערכת ניתוח מתקדמת מבוססת API | Financial Modeling Prep</p>', unsafe_allow_html=True)
+st.markdown("---")
 
+# ========================================
+# Sidebar - תפריט צד
+# ========================================
 
-@dataclass
-class IncomeStatement:
-    """דוח רווח והפסד"""
-    revenues: Optional[float] = None
-    gross_profit: Optional[float] = None
-    operating_income: Optional[float] = None
-    ebitda: Optional[float] = None
-    interest_expense: Optional[float] = None
-    income_tax: Optional[float] = None
-    net_income: Optional[float] = None
-    eps: Optional[float] = None
-    shares_outstanding: Optional[float] = None
+with st.sidebar:
+    st.markdown("## ⚙️ הגדרות")
+    
+    st.info("🌐 **API אוטומטי** הוא הדרך המומלצת!")
+    
+    # בחירת מקור נתונים
+    data_source = st.radio(
+        "📥 בחר מקור נתונים:",
+        ["🌐 API אוטומטי (מומלץ)", "📝 העתק מאקסל (חלופה)", "⚡ דוגמה מהירה"],
+        help="API מספק נתונים מלאים ומעודכנים"
+    )
+    
+    st.markdown("---")
+    st.markdown("### ℹ️ מידע")
+    st.markdown("""
+    **getValue מתבסס על:**
+    - 🌐 **API** - מקור הנתונים העיקרי
+    - 📊 נתונים מ-Financial Modeling Prep
+    - 🔄 עדכון אוטומטי
+    
+    **פיצ'רים:**
+    - ✅ TTM אוטומטי
+    - ✅ דוחות דינמיים
+    - ✅ יחסים פיננסיים
+    - ✅ 10+ רבעונים/שנים
+    """)
 
+# ========================================
+# אתחול
+# ========================================
 
-@dataclass
-class CashFlow:
-    """דוח תזרים מזומנים"""
-    cash_flow_from_operations: Optional[float] = None
-    capital_expenditures: Optional[float] = None
-    free_cash_flow: Optional[float] = None
-    stock_based_compensation: Optional[float] = None
-    adjusted_fcf: Optional[float] = None
-    depreciation_amortization: Optional[float] = None
-    change_in_working_capital: Optional[float] = None
-    dividend_paid: Optional[float] = None
-    repurchase_of_common_stock: Optional[float] = None
-    
-    def calculate_fcf(self) -> Optional[float]:
-        if self.free_cash_flow is not None:
-            return self.free_cash_flow
-        if self.cash_flow_from_operations and self.capital_expenditures:
-            self.free_cash_flow = self.cash_flow_from_operations - self.capital_expenditures
-            return self.free_cash_flow
-        return None
-    
-    def calculate_adjusted_fcf(self) -> Optional[float]:
-        fcf = self.calculate_fcf()
-        if fcf and self.stock_based_compensation:
-            self.adjusted_fcf = fcf - self.stock_based_compensation
-            return self.adjusted_fcf
-        return None
+# API Key
+API_KEY = "69724f3b18d8b1.58945206"
 
+# Session state
+if 'company' not in st.session_state:
+    st.session_state.company = None
+if 'manager' not in st.session_state:
+    st.session_state.manager = GetValueDataManager(api_key=API_KEY)
 
-@dataclass
-class BalanceSheet:
-    """מאזן"""
-    cash_and_equivalents: Optional[float] = None
-    current_assets: Optional[float] = None
-    total_assets: Optional[float] = None
-    current_liabilities: Optional[float] = None
-    total_debt: Optional[float] = None
-    equity_value: Optional[float] = None
-    shares_outstanding: Optional[float] = None
-    minority_interest: Optional[float] = None
-    preferred_stock: Optional[float] = None
+# ========================================
+# טעינת נתונים
+# ========================================
 
-
-@dataclass
-class DebtBreakdown:
-    """פירוט החוב"""
-    current_portion_long_term_debt: Optional[float] = None
-    current_portion_capital_leases: Optional[float] = None
-    long_term_debt: Optional[float] = None
-    capital_leases: Optional[float] = None
-    total_debt: Optional[float] = None
-    cash_and_equivalents: Optional[float] = None
-    net_debt: Optional[float] = None
+if "API" in data_source:  # API אוטומטי (מומלץ)
+    st.markdown("### 🌐 טעינה מ-API (הדרך המומלצת)")
+    st.success("✨ API מספק נתונים מלאים, מדויקים ומעודכנים מ-Financial Modeling Prep")
     
-    def calculate_net_debt(self) -> Optional[float]:
-        if self.total_debt and self.cash_and_equivalents:
-            self.net_debt = self.total_debt - self.cash_and_equivalents
-            return self.net_debt
-        return None
-
-
-@dataclass
-class MarketData:
-    """נתוני שוק"""
-    date: Optional[datetime] = None
-    price: Optional[float] = None
-    market_cap: Optional[float] = None
-    shares_outstanding: Optional[float] = None
-
-
-@dataclass
-class FinancialPeriod:
-    """תקופה פיננסית בודדת"""
-    period_type: PeriodType
-    period_name: str
-    period_end_date: Optional[datetime] = None
+    col1, col2 = st.columns([3, 1])
     
-    income_statement: IncomeStatement = field(default_factory=IncomeStatement)
-    cash_flow: CashFlow = field(default_factory=CashFlow)
-    balance_sheet: BalanceSheet = field(default_factory=BalanceSheet)
-    debt_breakdown: DebtBreakdown = field(default_factory=DebtBreakdown)
-    market_data: Optional[MarketData] = None
-    
-    num_employees: Optional[int] = None
-    corporate_tax_rate: Optional[float] = None
-    beta: Optional[float] = None
-
-
-@dataclass
-class CompanyFinancials:
-    """נתונים פיננסיים מלאים של חברה"""
-    ticker: str
-    company_name: str
-    currency: str = "USD"
-    last_updated: Optional[datetime] = None
-    
-    ttm: Optional[FinancialPeriod] = None
-    quarterly_data: List[FinancialPeriod] = field(default_factory=list)
-    annual_data: List[FinancialPeriod] = field(default_factory=list)
-    
-    wacc: Optional[float] = None
-    cost_of_debt: Optional[float] = None
-    cost_of_equity: Optional[float] = None
-
-
-# ===============================================================================
-# SECTION 3: FINANCIAL RATIOS (חישוב יחסים)
-# ===============================================================================
-
-class FinancialRatios:
-    """מחלקה לחישוב יחסים פיננסיים"""
-    
-    def __init__(self, period: FinancialPeriod, previous_period: Optional[FinancialPeriod] = None):
-        self.period = period
-        self.previous_period = previous_period
-        self.income = period.income_statement
-        self.cash_flow = period.cash_flow
-        self.balance = period.balance_sheet
-        self.debt = period.debt_breakdown
-        self.market = period.market_data
-    
-    # Valuation
-    def pe_ratio(self) -> Optional[float]:
-        if self.market and self.market.market_cap and self.income.net_income:
-            return self.market.market_cap / self.income.net_income
-        return None
-    
-    def ps_ratio(self) -> Optional[float]:
-        if self.market and self.market.market_cap and self.income.revenues:
-            return self.market.market_cap / self.income.revenues
-        return None
-    
-    # Profitability
-    def gross_margin(self) -> Optional[float]:
-        if self.income.revenues and self.income.revenues != 0 and self.income.gross_profit:
-            return self.income.gross_profit / self.income.revenues
-        return None
-    
-    def operating_margin(self) -> Optional[float]:
-        if self.income.revenues and self.income.revenues != 0 and self.income.operating_income:
-            return self.income.operating_income / self.income.revenues
-        return None
-    
-    def net_margin(self) -> Optional[float]:
-        if self.income.revenues and self.income.revenues != 0 and self.income.net_income:
-            return self.income.net_income / self.income.revenues
-        return None
-    
-    # Returns
-    def roe(self) -> Optional[float]:
-        if not self.previous_period:
-            return None
-        curr_equity = self.balance.equity_value
-        prev_equity = self.previous_period.balance_sheet.equity_value
-        if curr_equity and prev_equity and self.income.net_income:
-            avg_equity = (curr_equity + prev_equity) / 2
-            if avg_equity != 0:
-                return self.income.net_income / avg_equity
-        return None
-    
-    def roic(self, tax_rate: Optional[float] = None) -> Optional[float]:
-        if not self.income.operating_income:
-            return None
-        if tax_rate is None and self.income.income_tax and self.income.operating_income:
-            tax_rate = self.income.income_tax / self.income.operating_income
-        if tax_rate is None:
-            return None
-        nopat = self.income.operating_income * (1 - tax_rate)
-        invested_capital = 0
-        if self.debt.total_debt:
-            invested_capital += abs(self.debt.total_debt)
-        if self.balance.equity_value:
-            invested_capital += self.balance.equity_value
-        if invested_capital != 0:
-            return nopat / invested_capital
-        return None
-    
-    # Capital Structure
-    def interest_coverage(self) -> Optional[float]:
-        if self.income.interest_expense and self.income.interest_expense != 0:
-            return self.income.operating_income / abs(self.income.interest_expense)
-        return None
-    
-    def calculate_all_ratios(self, wacc: Optional[float] = None) -> dict:
-        """חישוב כל היחסים"""
-        return {
-            'pe_ratio': self.pe_ratio(),
-            'ps_ratio': self.ps_ratio(),
-            'gross_margin': self.gross_margin(),
-            'operating_margin': self.operating_margin(),
-            'net_margin': self.net_margin(),
-            'roe': self.roe(),
-            'roic': self.roic(),
-            'interest_coverage': self.interest_coverage(),
-        }
-
-
-# ===============================================================================
-# SECTION 4: PERIOD MANAGER (ניהול תקופות דינמי)
-# ===============================================================================
-
-class PeriodManager:
-    """מנהל תקופות - זיהוי ועדכון דינמי"""
-    
-    def __init__(self, company: CompanyFinancials):
-        self.company = company
-    
-    @staticmethod
-    def parse_period_info(period_name: str):
-        """פירוק שם תקופה"""
-        period_name = period_name.strip()
-        if period_name.upper() == 'TTM':
-            return ('TTM', 0, None)
-        quarter_match = re.match(r'(\d{4})\s*Q(\d)', period_name)
-        if quarter_match:
-            year, quarter = quarter_match.groups()
-            return ('QUARTERLY', int(year), int(quarter))
-        year_match = re.match(r'^(\d{4})$', period_name)
-        if year_match:
-            return ('ANNUAL', int(year_match.group(1)), None)
-        return (None, 0, None)
-    
-    def calculate_ttm_from_quarters(self) -> Optional[FinancialPeriod]:
-        """חישוב TTM מ-4 רבעונים"""
-        if len(self.company.quarterly_data) < 4:
-            return None
-        
-        sorted_quarters = self._sort_periods(self.company.quarterly_data[:4])
-        ttm = FinancialPeriod(period_type=PeriodType.TTM, period_name="TTM")
-        
-        # חיבור Income Statement
-        ttm.income_statement.revenues = self._sum_field(sorted_quarters, 'income_statement', 'revenues')
-        ttm.income_statement.gross_profit = self._sum_field(sorted_quarters, 'income_statement', 'gross_profit')
-        ttm.income_statement.operating_income = self._sum_field(sorted_quarters, 'income_statement', 'operating_income')
-        ttm.income_statement.net_income = self._sum_field(sorted_quarters, 'income_statement', 'net_income')
-        ttm.income_statement.eps = sorted_quarters[0].income_statement.eps
-        
-        # Cash Flow
-        ttm.cash_flow.cash_flow_from_operations = self._sum_field(sorted_quarters, 'cash_flow', 'cash_flow_from_operations')
-        ttm.cash_flow.free_cash_flow = self._sum_field(sorted_quarters, 'cash_flow', 'free_cash_flow')
-        
-        # Balance Sheet - מהרבעון האחרון
-        ttm.balance_sheet = sorted_quarters[0].balance_sheet
-        ttm.market_data = sorted_quarters[0].market_data
-        
-        return ttm
-    
-    def identify_last_full_year(self) -> Optional[int]:
-        """זיהוי השנה המלאה האחרונה"""
-        if not self.company.quarterly_data:
-            if self.company.annual_data:
-                sorted_annual = self._sort_periods(self.company.annual_data)
-                _, year, _ = self.parse_period_info(sorted_annual[0].period_name)
-                return year
-            return None
-        
-        sorted_quarters = self._sort_periods(self.company.quarterly_data)
-        _, year, quarter = self.parse_period_info(sorted_quarters[0].period_name)
-        
-        if quarter == 4:
-            return year
-        return year - 1
-    
-    def print_period_structure(self):
-        """הדפסת מבנה תקופות"""
-        print("="*70)
-        print("📊 Period Structure")
-        print("="*70)
-        
-        if self.company.ttm:
-            print(f"\n🔄 TTM: Calculated from 4 latest quarters")
-        
-        last_year = self.identify_last_full_year()
-        if last_year:
-            print(f"📅 Last Full Year: {last_year}")
-        
-        if self.company.quarterly_data:
-            print(f"\n📈 Quarterly Data: {len(self.company.quarterly_data)} quarters")
-            for i, q in enumerate(self.company.quarterly_data[:5], 1):
-                rev = q.income_statement.revenues
-                print(f"   {i}. {q.period_name:12s} - Revenue: ${rev:,.0f}M" if rev else f"   {i}. {q.period_name}")
-        
-        print("="*70)
-    
-    def _sort_periods(self, periods: List[FinancialPeriod]) -> List[FinancialPeriod]:
-        """מיון תקופות מהחדש לישן"""
-        def sort_key(period):
-            ptype, year, quarter = self.parse_period_info(period.period_name)
-            return (year, quarter if quarter else 0)
-        return sorted(periods, key=sort_key, reverse=True)
-    
-    @staticmethod
-    def _sum_field(periods: List[FinancialPeriod], obj_name: str, field_name: str) -> Optional[float]:
-        """סיכום שדה"""
-        total = 0
-        count = 0
-        for period in periods:
-            obj = getattr(period, obj_name)
-            value = getattr(obj, field_name, None)
-            if value is not None:
-                total += value
-                count += 1
-        return total if count > 0 else None
-
-
-# ===============================================================================
-# SECTION 5: FINANCIAL API CLIENT
-# ===============================================================================
-
-class FinancialDataAPI:
-    """Client למשיכת נתונים מ-API"""
-    
-    BASE_URL = "https://financialmodelingprep.com/api/v3"
-    
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.session = requests.Session()
-        self.rate_limit_delay = 0.25
-        self.last_request_time = 0
-    
-    def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Any]:
-        """ביצוע בקשת API"""
-        time.sleep(max(0, self.rate_limit_delay - (time.time() - self.last_request_time)))
-        self.last_request_time = time.time()
-        
-        if params is None:
-            params = {}
-        params['apikey'] = self.api_key
-        
-        try:
-            response = self.session.get(f"{self.BASE_URL}{endpoint}", params=params, timeout=10)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            print(f"❌ API Error: {e}")
-            return None
-    
-    def fetch_complete_data(self, symbol: str, num_periods: int = 10) -> Optional[CompanyFinancials]:
-        """משיכת נתונים מלאים"""
-        print(f"🔍 Fetching {symbol} from API...")
-        
-        # Profile
-        profile = self._make_request(f"/profile/{symbol}")
-        if not profile or len(profile) == 0:
-            return None
-        profile = profile[0]
-        
-        company = CompanyFinancials(
-            ticker=symbol,
-            company_name=profile.get('companyName', symbol),
-            currency=profile.get('currency', 'USD'),
-            last_updated=datetime.now()
+    with col1:
+        ticker = st.text_input(
+            "סימול מניה:",
+            value="AAPL",
+            placeholder="AAPL, MSFT, GOOGL, TSLA...",
+            help="הזן סימול מניה אמריקאי"
         )
-        
-        # Quarterly data
-        quarterly_income = self._make_request(f"/income-statement/{symbol}", {"period": "quarter", "limit": num_periods})
-        if quarterly_income:
-            company.quarterly_data = self._parse_periods(quarterly_income, PeriodType.QUARTERLY)
-            print(f"✅ Loaded {len(company.quarterly_data)} quarters")
-        
-        # TTM
-        if len(company.quarterly_data) >= 4:
-            manager = PeriodManager(company)
-            company.ttm = manager.calculate_ttm_from_quarters()
-            print(f"✅ TTM calculated")
-        
-        return company
     
-    def _parse_periods(self, income_data: List[Dict], period_type: PeriodType) -> List[FinancialPeriod]:
-        """המרת נתוני API"""
-        periods = []
-        for income in income_data:
-            date_str = income.get('date', '')
-            period_str = income.get('period', '')
-            year = income.get('calendarYear', '')
-            
-            if period_type == PeriodType.QUARTERLY:
-                period_name = f"{year} {period_str}"
-            else:
-                period_name = str(year)
-            
-            period = FinancialPeriod(
-                period_type=period_type,
-                period_name=period_name
-            )
-            
-            # Income Statement
-            period.income_statement.revenues = self._get_millions(income, 'revenue')
-            period.income_statement.net_income = self._get_millions(income, 'netIncome')
-            period.income_statement.gross_profit = self._get_millions(income, 'grossProfit')
-            period.income_statement.operating_income = self._get_millions(income, 'operatingIncome')
-            period.income_statement.eps = income.get('eps')
-            
-            periods.append(period)
-        
-        return periods
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚀 טען נתונים", type="primary", use_container_width=True):
+            with st.spinner(f'🔍 מושך נתונים עבור {ticker}...'):
+                try:
+                    company = st.session_state.manager.load_company(ticker.upper())
+                    if company:
+                        st.session_state.company = company
+                        st.success(f"✅ נטען בהצלחה: {company.company_name}")
+                        st.info(f"📊 נמשכו {len(company.quarterly_data)} רבעונים + TTM אוטומטי")
+                    else:
+                        st.error("❌ לא הצלחתי לטעון את הנתונים מה-API")
+                        st.info("💡 בדוק שהסימול נכון, או נסה להשתמש באפשרות 'העתק מאקסל'")
+                except Exception as e:
+                    st.error(f"❌ שגיאה בטעינה מ-API: {str(e)}")
+                    st.info("💡 אפשר לנסות להשתמש באפשרות 'העתק מאקסל' כחלופה")
+
+elif "אקסל" in data_source:  # העתק מאקסל (חלופה)
+    st.markdown("### 📝 העתק מאקסל (אפשרות חלופית)")
+    st.warning("⚠️ שים לב: API הוא הדרך המומלצת. השתמש באפשרות זו רק אם יש לך נתונים משלך.")
+    st.info("💡 טיפ: בחר את הטבלה באקסל, לחץ Ctrl+C, והדבק כאן למטה")
     
-    @staticmethod
-    def _get_millions(data: Dict, key: str) -> Optional[float]:
-        """המרת ערך למיליונים"""
-        value = data.get(key)
-        if value is None:
-            return None
-        try:
-            return float(value) / 1_000_000
-        except:
-            return None
+    data_text = st.text_area(
+        "הדבק כאן את הנתונים מהאקסל:",
+        height=200,
+        placeholder="""Income statement\t2024 Q4\t2024 Q3\t2024 Q2\t2024 Q1
+Revenues\t94930\t85777\t85777\t90753
+Gross profit\t42831\t39671\t39671\t41863
+Net Income\t14736\t21448\t21448\t23636
+EPS\t0.97\t1.40\t1.40\t1.53
 
-
-# ===============================================================================
-# SECTION 6: DATA LOADER (טוען נתונים אוניברסלי)
-# ===============================================================================
-
-class FinancialDataParser:
-    """Parser לנתונים פיננסיים"""
+Cashflow\t2024 Q4\t2024 Q3\t2024 Q2\t2024 Q1
+Cash flow from operations\t29943\t29943\t25790\t67150
+Free Cash flow\t23632\t23445\t20563\t28773""",
+        help="העתק את הטבלה מאקסל (כולל הכותרות) והדבק כאן"
+    )
     
-    @staticmethod
-    def parse_from_text(text: str, ticker: str = "UNKNOWN") -> CompanyFinancials:
-        """Parse מטקסט"""
-        lines = text.strip().split('\n')
-        data = []
-        for line in lines:
-            row = re.split(r'\t+', line)
-            data.append(row)
-        
-        company = CompanyFinancials(ticker=ticker, company_name=ticker)
-        
-        # מציאת כותרות
-        header_row_idx = None
-        for idx, row in enumerate(data):
-            if row and row[0] and 'Income statement' in str(row[0]):
-                header_row_idx = idx
-                break
-        
-        if header_row_idx is None:
-            return company
-        
-        headers = data[header_row_idx]
-        periods = []
-        
-        for col_idx in range(1, len(headers)):
-            period_name = headers[col_idx].strip()
-            if 'TTM' in period_name.upper():
-                ptype = PeriodType.TTM
-            elif 'Q' in period_name:
-                ptype = PeriodType.QUARTERLY
-            else:
-                ptype = PeriodType.ANNUAL
-            
-            period = FinancialPeriod(period_type=ptype, period_name=period_name)
-            periods.append(period)
-        
-        # קריאת נתונים
-        field_map = {
-            'Revenues': ('income_statement', 'revenues'),
-            'Gross profit': ('income_statement', 'gross_profit'),
-            'Operating income': ('income_statement', 'operating_income'),
-            'Net Income': ('income_statement', 'net_income'),
-            'EPS': ('income_statement', 'eps'),
-            'Cash flow from operations': ('cash_flow', 'cash_flow_from_operations'),
-            'Free Cash flow': ('cash_flow', 'free_cash_flow'),
-        }
-        
-        for row in data[header_row_idx + 1:]:
-            if not row or not row[0]:
-                continue
-            field = row[0].strip()
-            if field in field_map:
-                obj_name, attr_name = field_map[field]
-                for col_idx in range(1, min(len(row), len(periods) + 1)):
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        ticker_text = st.text_input(
+            "סימול החברה:",
+            value="AAPL",
+            placeholder="למשל: AAPL",
+            help="הזן את הסימול של החברה"
+        )
+    
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("📊 נתח נתונים", type="primary", use_container_width=True):
+            if data_text.strip():
+                with st.spinner('מנתח נתונים...'):
                     try:
-                        value = float(row[col_idx].replace(',', ''))
-                        period = periods[col_idx - 1]
-                        obj = getattr(period, obj_name)
-                        setattr(obj, attr_name, value)
-                    except:
-                        pass
-        
-        # שמירת תקופות
-        for period in periods:
-            if period.period_type == PeriodType.TTM:
-                company.ttm = period
-            elif period.period_type == PeriodType.QUARTERLY:
-                company.quarterly_data.append(period)
-        
-        # חישוב TTM אוטומטי
-        if company.ttm is None and len(company.quarterly_data) >= 4:
-            manager = PeriodManager(company)
-            company.ttm = manager.calculate_ttm_from_quarters()
-        
-        return company
-
-
-class GetValueDataManager:
-    """מנהל נתונים מרכזי"""
+                        company = st.session_state.manager.load_company(data_text, ticker=ticker_text.upper())
+                        if company:
+                            st.session_state.company = company
+                            st.success(f"✅ נותח בהצלחה: {ticker_text.upper()}")
+                            
+                            # הצגת מידע על מה שנטען
+                            if company.ttm:
+                                st.info(f"🔄 TTM חושב אוטומטית מ-{len(company.quarterly_data)} רבעונים")
+                        else:
+                            st.error("❌ לא הצלחתי לנתח את הנתונים")
+                            st.warning("💡 ודא שהנתונים מועתקים נכון עם טאבים בין העמודות")
+                    except Exception as e:
+                        st.error(f"❌ שגיאה: {str(e)}")
+                        st.warning("💡 טיפ: העתק את הטבלה מאקסל עם Ctrl+C ולא באמצעות Copy Special")
+            else:
+                st.warning("⚠️ נא להדביק נתונים מאקסל בתיבת הטקסט")
     
-    def __init__(self, api_key: str = "69724f3b18d8b1.58945206"):
-        self.api_key = api_key
-        self.api_client = FinancialDataAPI(api_key) if api_key else None
-        self.companies: Dict[str, CompanyFinancials] = {}
+    # דוגמת פורמט
+    with st.expander("📋 ראה דוגמה לפורמט נכון"):
+        st.code("""Income statement\t2024 Q4\t2024 Q3\t2024 Q2\t2024 Q1
+Revenues\t94930\t85777\t85777\t90753
+Gross profit\t42831\t39671\t39671\t41863
+Operating income\t29590\t28355\t28355\t29553
+Net Income\t14736\t21448\t21448\t23636
+EPS\t0.97\t1.40\t1.40\t1.53
+
+Cashflow\t2024 Q4\t2024 Q3\t2024 Q2\t2024 Q1
+Cash flow from operations\t29943\t29943\t25790\t67150
+Free Cash flow\t23632\t23445\t20563\t28773""", language="text")
+        
+        st.markdown("""
+        **חשוב:**
+        - השורה הראשונה צריכה להכיל "Income statement" + התקופות
+        - כל עמודה מופרדת ב-TAB (לא רווח!)
+        - השמות צריכים להיות באנגלית
+        - המספרים ללא פסיקים
+        """)
+
+else:  # דוגמה מהירה
+    st.info("👇 לחץ לטעינת דוגמה של Apple")
     
-    def load_company(self, source: Union[str, Path], ticker: Optional[str] = None) -> Optional[CompanyFinancials]:
-        """טעינת חברה"""
-        source_str = str(source)
+    if st.button("🍎 טען דוגמה", type="primary"):
+        sample_data = """Income statement\t2024 Q4\t2024 Q3\t2024 Q2\t2024 Q1
+Revenues\t94930\t85777\t85777\t90753
+Gross profit\t42831\t39671\t39671\t41863
+Operating income\t29590\t28355\t28355\t29553
+Net Income\t14736\t21448\t21448\t23636
+EPS\t0.97\t1.40\t1.40\t1.53
+
+Cashflow\t2024 Q4\t2024 Q3\t2024 Q2\t2024 Q1
+Cash flow from operations\t29943\t29943\t25790\t67150
+Free Cash flow\t23632\t23445\t20563\t28773"""
         
-        # זיהוי אוטומטי
-        if len(source_str) <= 5 and source_str.isupper() and self.api_client:
-            # סימול מניה - טעינה מ-API
-            print(f"📡 Loading {source_str} from API...")
-            company = self.api_client.fetch_complete_data(source_str)
-        elif '\t' in source_str or source_str.count('\n') > 3:
-            # טקסט מועתק
-            print(f"📝 Loading from text...")
-            company = FinancialDataParser.parse_from_text(source_str, ticker or "UNKNOWN")
-        else:
-            print(f"❌ Could not detect source type")
-            return None
+        with st.spinner('טוען דוגמה...'):
+            company = st.session_state.manager.load_company(sample_data, ticker="AAPL")
+            st.session_state.company = company
+            st.success("✅ דוגמה נטענה: Apple Inc.")
+
+# ========================================
+# הצגת תוצאות
+# ========================================
+
+company = st.session_state.company
+
+if company:
+    st.markdown("---")
+    
+    # ========================================
+    # מידע כללי + TTM
+    # ========================================
+    
+    st.markdown(f"### 💼 {company.company_name} ({company.ticker})")
+    
+    # מטריקות TTM
+    if company.ttm:
+        st.markdown("#### 📊 TTM (12 חודשים אחרונים)")
         
-        if company:
-            self.companies[company.ticker] = company
-            print(f"✅ Loaded {company.ticker}")
+        ttm = company.ttm
+        inc = ttm.income_statement
+        cf = ttm.cash_flow
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            if inc.revenues:
+                st.metric("💰 הכנסות", f"${inc.revenues:,.0f}M")
+        
+        with col2:
+            if inc.net_income:
+                margin = (inc.net_income / inc.revenues * 100) if inc.revenues else 0
+                st.metric("✅ רווח נקי", f"${inc.net_income:,.0f}M", f"{margin:.1f}%")
+        
+        with col3:
+            if inc.eps:
+                st.metric("📈 EPS", f"${inc.eps:.2f}")
+        
+        with col4:
+            if cf.free_cash_flow:
+                st.metric("💵 FCF", f"${cf.free_cash_flow:,.0f}M")
+        
+        # יחסים פיננסיים מהירים
+        st.markdown("#### 📊 יחסים פיננסיים (TTM)")
+        
+        ratios = FinancialRatios(ttm)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            gross_m = ratios.gross_margin()
+            if gross_m:
+                st.metric("מרווח גולמי", f"{gross_m:.1%}")
+        
+        with col2:
+            net_m = ratios.net_margin()
+            if net_m:
+                st.metric("מרווח נקי", f"{net_m:.1%}")
+        
+        with col3:
+            operating_m = ratios.operating_margin()
+            if operating_m:
+                st.metric("מרווח תפעולי", f"{operating_m:.1%}")
+        
+        with col4:
+            pe = ratios.pe_ratio()
+            if pe:
+                st.metric("P/E Ratio", f"{pe:.1f}")
+    
+    # ========================================
+    # מבנה תקופות
+    # ========================================
+    
+    st.markdown("---")
+    st.markdown("### 📅 מבנה תקופות")
+    
+    pm = PeriodManager(company)
+    periods = pm.get_relevant_periods_order()
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.info(f"🔄 **TTM:** {'מחושב מ-4 רבעונים' if periods['ttm'] else 'לא זמין'}")
+    
+    with col2:
+        st.info(f"📅 **שנה מלאה אחרונה:** {periods['last_full_year'] if periods['last_full_year'] else 'לא זוהה'}")
+    
+    with col3:
+        st.info(f"📊 **רבעונים:** {len(company.quarterly_data)} | **שנים:** {len(company.annual_data)}")
+    
+    # ========================================
+    # בחירת סוג דוח
+    # ========================================
+    
+    st.markdown("---")
+    st.markdown("### 📋 דוחות פיננסיים")
+    
+    period_choice = st.radio(
+        "בחר סוג דוח:",
+        ["Quarterly (רבעוני)", "Annual (שנתי)"],
+        horizontal=True
+    )
+    
+    # ========================================
+    # פונקציות עזר ליצירת טבלאות
+    # ========================================
+    
+    def create_financial_dataframe(periods_list, include_ttm=True):
+        """יצירת DataFrame עם TTM + תקופות"""
+        
+        if not periods_list:
+            return pd.DataFrame()
+        
+        # בניית המילון של נתונים
+        data_dict = {}
+        
+        # הוספת TTM אם קיים
+        if include_ttm and company.ttm:
+            data_dict['TTM'] = {
+                'Revenues': company.ttm.income_statement.revenues,
+                'Gross Profit': company.ttm.income_statement.gross_profit,
+                'Operating Income': company.ttm.income_statement.operating_income,
+                'Net Income': company.ttm.income_statement.net_income,
+                'EPS': company.ttm.income_statement.eps,
+                'Operating CF': company.ttm.cash_flow.cash_flow_from_operations,
+                'Free Cash Flow': company.ttm.cash_flow.free_cash_flow,
+            }
+        
+        # הוספת כל התקופות
+        for period in periods_list:
+            inc = period.income_statement
+            cf = period.cash_flow
             
-            # הצגת מבנה
-            manager = PeriodManager(company)
-            manager.print_period_structure()
+            data_dict[period.period_name] = {
+                'Revenues': inc.revenues,
+                'Gross Profit': inc.gross_profit,
+                'Operating Income': inc.operating_income,
+                'Net Income': inc.net_income,
+                'EPS': inc.eps,
+                'Operating CF': cf.cash_flow_from_operations,
+                'Free Cash Flow': cf.free_cash_flow,
+            }
         
-        return company
-
-
-# ===============================================================================
-# SECTION 7: EXAMPLES & USAGE (דוגמאות שימוש)
-# ===============================================================================
-
-def example_load_from_text():
-    """דוגמה: טעינה מטקסט"""
-    print("\n" + "="*70)
-    print("📝 Example: Load from Text (Copy from Excel)")
-    print("="*70 + "\n")
-    
-    # טקסט לדוגמה
-    sample_data = """Last updated: 11/22/2025
-Financials of	AAPL
-
-Income statement	2024 Q4	2024 Q3	2024 Q2	2024 Q1
-Revenues	94930	85777	85777	90753
-Gross profit	42831	39671	39671	41863
-Net Income	14736	21448	21448	23636
-EPS	0.97	1.40	1.40	1.53
-
-Cashflow	2024 Q4	2024 Q3	2024 Q2	2024 Q1
-Cash flow from operations	29943	29943	25790	67150
-Free Cash flow	143566	143566	127877	143566"""
-    
-    manager = GetValueDataManager()
-    company = manager.load_company(sample_data, ticker="AAPL")
-    
-    if company and company.ttm:
-        print(f"\n💰 TTM Results:")
-        print(f"   Revenue: ${company.ttm.income_statement.revenues:,.0f}M")
-        print(f"   Net Income: ${company.ttm.income_statement.net_income:,.0f}M")
+        # המרה ל-DataFrame
+        df = pd.DataFrame(data_dict)
         
-        # חישוב יחסים
-        ratios = FinancialRatios(company.ttm)
-        print(f"\n📊 Ratios:")
-        if ratios.net_margin():
-            print(f"   Net Margin: {ratios.net_margin():.1%}")
-        if ratios.operating_margin():
-            print(f"   Operating Margin: {ratios.operating_margin():.1%}")
+        # עיצוב - פורמט מספרים
+        def format_number(x):
+            if pd.isna(x) or x is None:
+                return "-"
+            if abs(x) < 10:  # EPS
+                return f"${x:.2f}"
+            else:  # מיליונים
+                return f"${x:,.0f}M"
+        
+        # החלת הפורמט על כל התאים
+        df_styled = df.applymap(format_number)
+        
+        return df_styled
+    
+    def create_balance_sheet_df(periods_list, include_ttm=True):
+        """יצירת DataFrame למאזן"""
+        
+        if not periods_list:
+            return pd.DataFrame()
+        
+        data_dict = {}
+        
+        # TTM (מהרבעון האחרון)
+        if include_ttm and company.ttm:
+            bs = company.ttm.balance_sheet
+            data_dict['TTM'] = {
+                'Cash & Equivalents': bs.cash_and_equivalents,
+                'Current Assets': bs.current_assets,
+                'Total Assets': bs.total_assets,
+                'Current Liabilities': bs.current_liabilities,
+                'Total Debt': bs.total_debt,
+                'Equity': bs.equity_value,
+            }
+        
+        # תקופות
+        for period in periods_list:
+            bs = period.balance_sheet
+            data_dict[period.period_name] = {
+                'Cash & Equivalents': bs.cash_and_equivalents,
+                'Current Assets': bs.current_assets,
+                'Total Assets': bs.total_assets,
+                'Current Liabilities': bs.current_liabilities,
+                'Total Debt': bs.total_debt,
+                'Equity': bs.equity_value,
+            }
+        
+        df = pd.DataFrame(data_dict)
+        
+        def format_number(x):
+            if pd.isna(x) or x is None:
+                return "-"
+            return f"${x:,.0f}M"
+        
+        return df.applymap(format_number)
+    
+    # ========================================
+    # הצגת הטבלאות
+    # ========================================
+    
+    # בחירת התקופות לפי סוג הדוח
+    if "Quarterly" in period_choice:
+        periods_to_show = company.quarterly_data[:10]  # 10 רבעונים
+        show_ttm = True
+    else:
+        periods_to_show = company.annual_data[:10]  # 10 שנים
+        show_ttm = False
+    
+    # 1. Income Statement + Cash Flow
+    st.markdown("#### 📄 Income Statement & Cash Flow")
+    
+    if periods_to_show:
+        df_income = create_financial_dataframe(periods_to_show, include_ttm=show_ttm)
+        st.dataframe(df_income, use_container_width=True)
+    else:
+        st.warning("⚠️ אין נתונים זמינים לתקופה זו")
+    
+    # 2. Balance Sheet
+    st.markdown("#### ⚖️ Balance Sheet")
+    
+    if periods_to_show:
+        df_balance = create_balance_sheet_df(periods_to_show, include_ttm=show_ttm)
+        st.dataframe(df_balance, use_container_width=True)
+    else:
+        st.warning("⚠️ אין נתונים זמינים לתקופה זו")
+    
+    # ========================================
+    # טבלת רבעונים מפורטת
+    # ========================================
+    
+    if "Quarterly" in period_choice and company.quarterly_data:
+        st.markdown("---")
+        st.markdown("#### 📊 טבלת רבעונים מפורטת")
+        
+        quarterly_details = []
+        for q in company.quarterly_data[:12]:
+            inc = q.income_statement
+            cf = q.cash_flow
+            
+            # חישוב שינוי רבעוני
+            if inc.revenues:
+                quarterly_details.append({
+                    "רבעון": q.period_name,
+                    "הכנסות ($M)": f"{inc.revenues:,.0f}" if inc.revenues else "-",
+                    "רווח נקי ($M)": f"{inc.net_income:,.0f}" if inc.net_income else "-",
+                    "מרווח נקי": f"{(inc.net_income/inc.revenues*100):.1f}%" if (inc.revenues and inc.net_income) else "-",
+                    "EPS ($)": f"{inc.eps:.2f}" if inc.eps else "-",
+                    "FCF ($M)": f"{cf.free_cash_flow:,.0f}" if cf.free_cash_flow else "-",
+                })
+        
+        if quarterly_details:
+            df_details = pd.DataFrame(quarterly_details)
+            st.dataframe(df_details, use_container_width=True, hide_index=True)
 
+else:
+    # אין נתונים
+    st.info("👆 בחר מקור נתונים מהתפריט הצדדי והתחל!")
+    
+    st.markdown("## 🚀 איך להתחיל?")
+    
+    st.success("🌐 **API אוטומטי** הוא הדרך המומלצת - מספק נתונים מלאים ומעודכנים!")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        ### 1️⃣ API אוטומטי ⭐
+        **הדרך המומלצת!**
+        
+        - 🌐 נתונים מלאים מהאינטרנט
+        - 📊 10+ רבעונים + 10 שנים
+        - 🔄 TTM אוטומטי
+        - ✅ מעודכן תמיד
+        - 🚀 פשוט הזן סימול!
+        
+        **זו הדרך הטובה ביותר!**
+        """)
+    
+    with col2:
+        st.markdown("""
+        ### 2️⃣ העתק מאקסל
+        **אפשרות חלופית**
+        
+        - 📝 להעלות נתונים משלך
+        - 🔧 לשימוש מיוחד בלבד
+        - ⚠️ פחות מומלץ מ-API
+        
+        השתמש רק אם:
+        - יש לך נתונים ייחודיים
+        - API לא זמין
+        """)
+    
+    with col3:
+        st.markdown("""
+        ### 3️⃣ דוגמה מהירה
+        **להדגמה בלבד**
+        
+        - ⚡ ראה את המערכת בפעולה
+        - 🍎 דוגמה של Apple
+        - 📊 כולל TTM וכל הפיצ'רים
+        
+        מומלץ לנסות קודם!
+        """)
+    
+    # הסבר על TTM
+    st.markdown("---")
+    st.markdown("### ✨ למה API?")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.info("""
+        **יתרונות API:**
+        - ✅ נתונים מלאים (Income, Balance, Cash Flow)
+        - ✅ 10 רבעונים + 10 שנים
+        - ✅ TTM מחושב אוטומטית
+        - ✅ כל היחסים הפיננסיים
+        - ✅ תמיד מעודכן
+        """)
+    
+    with col2:
+        st.markdown("""
+        **TTM (Trailing Twelve Months)** = 12 החודשים האחרונים
+        
+        המערכת מחשבת אוטומטית:
+        - 🔄 מחבר 4 רבעונים אחרונים
+        - 📊 מציג בטבלאות כעמודה ראשונה
+        - 🎯 הנתון הכי רלוונטי!
+        """)
 
-def example_load_from_api():
-    """דוגמה: טעינה מ-API"""
-    print("\n" + "="*70)
-    print("📡 Example: Load from API")
-    print("="*70 + "\n")
-    
-    manager = GetValueDataManager()
-    company = manager.load_company("AAPL")  # מזהה אוטומטית שזה סימול
-    
-    if company and company.ttm:
-        print(f"\n💰 {company.company_name}")
-        print(f"   Revenue: ${company.ttm.income_statement.revenues:,.0f}M")
-        print(f"   Net Income: ${company.ttm.income_statement.net_income:,.0f}M")
+# ========================================
+# Footer
+# ========================================
 
-
-# ===============================================================================
-# MAIN - הפעלה אוטומטית
-# ===============================================================================
-
-if __name__ == "__main__":
-    print("""
-    ╔═══════════════════════════════════════════════════════════════════╗
-    ║                                                                   ║
-    ║              getValue Platform - All-in-One System                ║
-    ║                      מערכת ניתוח פיננסי מלאה                     ║
-    ║                                                                   ║
-    ║  API Key: 69724f3b18d8b1.58945206 (כבר משולב!)                   ║
-    ║                                                                   ║
-    ╚═══════════════════════════════════════════════════════════════════╝
-    """)
-    
-    print("🚀 Running examples...\n")
-    
-    # דוגמה 1: טעינה מטקסט (עובד תמיד)
-    example_load_from_text()
-    
-    # דוגמה 2: טעינה מ-API (דורש אינטרנט)
-    try:
-        example_load_from_api()
-    except Exception as e:
-        print(f"\n⚠️  API example skipped (requires internet): {e}")
-    
-    print("\n" + "="*70)
-    print("✅ Examples completed!")
-    print("="*70)
-    
-    print("""
-    
-    📖 How to use:
-    
-    # Option 1: Load from API (internet required)
-    manager = GetValueDataManager()
-    company = manager.load_company("AAPL")
-    
-    # Option 2: Load from text (always works)
-    data = '''
-    Income statement    2024 Q4    2024 Q3
-    Revenues           94930      85777
-    Net Income         14736      21448
-    '''
-    company = manager.load_company(data, ticker="AAPL")
-    
-    # Analyze
-    if company and company.ttm:
-        ratios = FinancialRatios(company.ttm)
-        print(f"Net Margin: {ratios.net_margin():.1%}")
-    
-    """)
-
-
-# ===============================================================================
-# END OF FILE
-# ===============================================================================
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #666;'>
+    <p><strong>getValue Platform</strong> | Powered by Financial Modeling Prep API | גרסה 1.2.0</p>
+    <p>🌐 נתמך על API | 📊 TTM דינמי | 💹 יחסים פיננסיים | 📈 דוחות מעודכנים</p>
+    <p style='font-size: 0.9em; margin-top: 10px;'>API הוא מקור הנתונים העיקרי והמומלץ</p>
+</div>
+""", unsafe_allow_html=True)
