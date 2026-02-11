@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>getValue - Financial Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --primary: #1f77b4;
+            --primary-dark: #155a8a;
+            --success: #28a745;
+            --warning: #ffc107;
+            --danger: #dc3545;
+            --bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --text: #333333;
+            --text-muted: #6c757d;
+            --border: #dee2e6;
+            --shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        /* ===== HEADER ===== */
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 1.5rem 2rem;
+            text-align: center;
+        }
+        .header h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+        .header p { opacity: 0.85; font-size: 1rem; }
+
+        /* ===== CONTAINER ===== */
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+
+        /* ===== SEARCH BAR ===== */
+        .search-section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .search-section label {
+            font-weight: 600;
+            font-size: 1.05rem;
+            white-space: nowrap;
+        }
+        .search-section input {
+            flex: 1;
+            min-width: 180px;
+            padding: 0.7rem 1rem;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            direction: ltr;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+        .search-section input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        .btn {
+            padding: 0.7rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-primary:disabled {
+            background: #a0c4e0;
+            cursor: not-allowed;
+        }
+        .quick-links {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .quick-link {
+            padding: 0.35rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: var(--bg);
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .quick-link:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* ===== LOADING ===== */
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            display: none;
+        }
+        .loading.active { display: block; }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== ERROR ===== */
+        .error-msg {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+        .error-msg.active { display: block; }
+
+        /* ===== COMPANY HEADER ===== */
+        .company-header {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+        .company-header.active { display: block; }
+        .company-header h2 { color: var(--primary); margin-bottom: 0.25rem; }
+        .company-meta { color: var(--text-muted); font-size: 0.95rem; }
+        .company-meta span { margin-left: 1.5rem; }
+
+        /* ===== METRICS GRID ===== */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .metric-card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 1.2rem 1.5rem;
+            box-shadow: var(--shadow);
+            border-right: 4px solid var(--primary);
+        }
+        .metric-card .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.3rem;
+        }
+        .metric-card .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text);
+            direction: ltr;
+            text-align: right;
+        }
+        .metric-card .sub {
+            font-size: 0.8rem;
+            color: var(--success);
+            margin-top: 0.2rem;
+        }
+        .metric-card .sub.negative { color: var(--danger); }
+
+        /* ===== SECTION ===== */
+        .section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+        }
+        .section h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--bg);
+        }
+
+        /* ===== RATIOS GRID ===== */
+        .ratios-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        .ratio-group h4 {
+            font-size: 1rem;
+            color: var(--primary-dark);
+            margin-bottom: 0.75rem;
+        }
+        .ratio-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--bg);
+        }
+        .ratio-item .name { color: var(--text-muted); font-size: 0.9rem; }
+        .ratio-item .val {
+            font-weight: 600;
+            direction: ltr;
+            font-size: 0.95rem;
+        }
+
+        /* ===== TABLE ===== */
+        .table-wrapper { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        table th, table td {
+            padding: 0.65rem 1rem;
+            text-align: right;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        table th {
+            background: var(--bg);
+            font-weight: 600;
+            color: var(--primary-dark);
+            position: sticky;
+            top: 0;
+        }
+        table td { direction: ltr; text-align: right; }
+        table td:first-child {
+            direction: rtl;
+            font-weight: 500;
+            color: var(--text);
+            position: sticky;
+            right: 0;
+            background: var(--card-bg);
+        }
+        table th:first-child {
+            position: sticky;
+            right: 0;
+            z-index: 2;
+        }
+        .ttm-col { background: #e8f4fd !important; font-weight: 600 !important; }
+        table tr:hover td { background: #f0f7ff; }
+        table tr:hover td:first-child { background: #e8f0f8; }
+        table tr:hover .ttm-col { background: #d6ecfa !important; }
+
+        /* ===== TABS ===== */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 1.5rem;
+        }
+        .tab {
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-muted);
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+            margin-bottom: -2px;
+        }
+        .tab:hover { color: var(--primary); }
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+            font-weight: 600;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ===== CHARTS ===== */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 1.5rem;
+        }
+        .chart-box {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 1rem;
+        }
+        .chart-box canvas { max-height: 320px; }
+
+        /* ===== FOOTER ===== */
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* ===== RESULTS AREA ===== */
+        #results { display: none; }
+        #results.active { display: block; }
+
+        /* ===== WELCOME ===== */
+        .welcome {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+        .welcome h2 { color: var(--primary); margin-bottom: 1rem; }
+        .welcome p { max-width: 600px; margin: 0 auto 0.5rem; }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .search-section { flex-direction: column; }
+            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-grid { grid-template-columns: 1fr; }
+            .container { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <h1>getValue Platform</h1>
+    <p>Financial Analysis | Financial Modeling Prep API</p>
+</div>
+
+<div class="container">
+
+    <!-- SEARCH -->
+    <div class="search-section">
+        <label>Ticker:</label>
+        <input type="text" id="tickerInput" placeholder="AAPL" value="AAPL" maxlength="10"
+               onkeydown="if(event.key==='Enter') fetchData()">
+        <button class="btn btn-primary" id="fetchBtn" onclick="fetchData()">Load Data</button>
+        <div class="quick-links">
+            <span class="quick-link" onclick="quickLoad('AAPL')">AAPL</span>
+            <span class="quick-link" onclick="quickLoad('MSFT')">MSFT</span>
+            <span class="quick-link" onclick="quickLoad('GOOGL')">GOOGL</span>
+            <span class="quick-link" onclick="quickLoad('AMZN')">AMZN</span>
+            <span class="quick-link" onclick="quickLoad('TSLA')">TSLA</span>
+            <span class="quick-link" onclick="quickLoad('NVDA')">NVDA</span>
+            <span class="quick-link" onclick="quickLoad('META')">META</span>
+        </div>
+    </div>
+
+    <!-- LOADING -->
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Loading financial data...</p>
+    </div>
+
+    <!-- ERROR -->
+    <div class="error-msg" id="errorMsg"></div>
+
+    <!-- WELCOME -->
+    <div class="welcome" id="welcome">
+        <h2>Welcome to getValue</h2>
+        <p>Enter a US stock ticker and click "Load Data" to get a full financial analysis.</p>
+        <p>Includes: Income Statement, Balance Sheet, Cash Flow, TTM calculations, financial ratios, and interactive charts.</p>
+    </div>
+
+    <!-- RESULTS -->
+    <div id="results">
+
+        <!-- Company Header -->
+        <div class="company-header active" id="companyHeader">
+            <h2 id="companyName"></h2>
+            <div class="company-meta">
+                <span id="companyTicker"></span>
+                <span id="companySector"></span>
+                <span id="companyPrice"></span>
+                <span id="companyMktCap"></span>
+            </div>
+        </div>
+
+        <!-- TTM Metrics -->
+        <div class="metrics-grid" id="metricsGrid"></div>
+
+        <!-- TABS -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('income')">Income Statement</div>
+            <div class="tab" onclick="switchTab('balance')">Balance Sheet</div>
+            <div class="tab" onclick="switchTab('cashflow')">Cash Flow</div>
+            <div class="tab" onclick="switchTab('ratios')">Ratios</div>
+            <div class="tab" onclick="switchTab('charts')">Charts</div>
+        </div>
+
+        <!-- Tab: Income Statement -->
+        <div class="tab-content active" id="tab-income">
+            <div class="section">
+                <h3>Income Statement (Quarterly)</h3>
+                <div class="table-wrapper" id="incomeTable"></div>
+            </div>
+            <div class="section" style="margin-top:1rem;">
+                <h3>Income Statement (Annual)</h3>
+                <div class="table-wrapper" id="incomeTableAnnual"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Balance Sheet -->
+        <div class="tab-content" id="tab-balance">
+            <div class="section">
+                <h3>Balance Sheet (Quarterly)</h3>
+                <div class="table-wrapper" id="balanceTable"></div>
+            </div>
+            <div class="section" style="margin-top:1rem;">
+                <h3>Balance Sheet (Annual)</h3>
+                <div class="table-wrapper" id="balanceTableAnnual"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Cash Flow -->
+        <div class="tab-content" id="tab-cashflow">
+            <div class="section">
+                <h3>Cash Flow (Quarterly)</h3>
+                <div class="table-wrapper" id="cashflowTable"></div>
+            </div>
+            <div class="section" style="margin-top:1rem;">
+                <h3>Cash Flow (Annual)</h3>
+                <div class="table-wrapper" id="cashflowTableAnnual"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Ratios -->
+        <div class="tab-content" id="tab-ratios">
+            <div class="section">
+                <h3>Financial Ratios (TTM)</h3>
+                <div class="ratios-grid" id="ratiosGrid"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Charts -->
+        <div class="tab-content" id="tab-charts">
+            <div class="section">
+                <h3>Interactive Charts</h3>
+                <div class="charts-grid">
+                    <div class="chart-box"><canvas id="chartRevenue"></canvas></div>
+                    <div class="chart-box"><canvas id="chartNetIncome"></canvas></div>
+                    <div class="chart-box"><canvas id="chartMargins"></canvas></div>
+                    <div class="chart-box"><canvas id="chartEPS"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /results -->
+
+    <!-- FOOTER -->
+    <div class="footer">
+        <strong>getValue Platform</strong> | Powered by Financial Modeling Prep API | v2.0.0
+    </div>
+
+</div><!-- /container -->
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const API_KEY = 'zF2GUU9LVP2ICuLDKJJ9SwQhkzw1TN4i';
+const BASE = 'https://financialmodelingprep.com/api/v3';
+
+// ============================================================
+// STATE
+// ============================================================
+let chartInstances = [];
+
+// ============================================================
+// HELPERS
+// ============================================================
+function fmt(val, decimals = 0) {
+    if (val == null || isNaN(val)) return '-';
+    if (Math.abs(val) >= 1e9) return '$' + (val / 1e6).toLocaleString('en-US', { maximumFractionDigits: decimals }) + 'M';
+    if (Math.abs(val) >= 1e6) return '$' + (val / 1e6).toLocaleString('en-US', { maximumFractionDigits: decimals }) + 'M';
+    if (Math.abs(val) < 50) return '$' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return '$' + val.toLocaleString('en-US', { maximumFractionDigits: decimals });
+}
+
+function fmtM(val) {
+    if (val == null || isNaN(val)) return '-';
+    return '$' + (val / 1e6).toLocaleString('en-US', { maximumFractionDigits: 0 }) + 'M';
+}
+
+function fmtB(val) {
+    if (val == null || isNaN(val)) return '-';
+    return '$' + (val / 1e9).toLocaleString('en-US', { maximumFractionDigits: 1 }) + 'B';
+}
+
+function fmtPct(val) {
+    if (val == null || isNaN(val)) return '-';
+    return (val * 100).toFixed(1) + '%';
+}
+
+function fmtEps(val) {
+    if (val == null || isNaN(val)) return '-';
+    return '$' + val.toFixed(2);
+}
+
+function fmtRatio(val) {
+    if (val == null || isNaN(val)) return '-';
+    return val.toFixed(2);
+}
+
+function periodLabel(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const q = m <= 3 ? 'Q1' : m <= 6 ? 'Q2' : m <= 9 ? 'Q3' : 'Q4';
+    return y + ' ' + q;
+}
+
+// ============================================================
+// API FETCH
+// ============================================================
+async function apiFetch(endpoint) {
+    const sep = endpoint.includes('?') ? '&' : '?';
+    const url = `${BASE}${endpoint}${sep}apikey=${API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    return res.json();
+}
+
+// ============================================================
+// TTM CALCULATION
+// ============================================================
+function calculateTTM(quarters) {
+    if (!quarters || quarters.length < 4) return null;
+    const q4 = quarters.slice(0, 4);
+
+    // Sum fields for income statement & cash flow, take latest for balance sheet / per-share
+    const sumFields = [
+        'revenue', 'costOfRevenue', 'grossProfit', 'operatingExpenses',
+        'operatingIncome', 'netIncome', 'ebitda', 'depreciationAndAmortization',
+        'interestExpense', 'incomeTaxExpense',
+        'operatingCashFlow', 'capitalExpenditure', 'freeCashFlow',
+        'dividendsPaid', 'netCashUsedForInvestingActivites',
+        'netCashUsedProvidedByFinancingActivities',
+        'researchAndDevelopmentExpenses', 'sellingGeneralAndAdministrativeExpenses'
+    ];
+
+    const ttm = { ...q4[0] };
+    ttm._isTTM = true;
+    ttm.period = 'TTM';
+    ttm.date = q4[0].date;
+
+    for (const field of sumFields) {
+        let sum = 0;
+        let hasVal = false;
+        for (const q of q4) {
+            if (q[field] != null) { sum += q[field]; hasVal = true; }
+        }
+        ttm[field] = hasVal ? sum : null;
+    }
+
+    // EPS: sum quarterly EPS
+    let epsSum = 0;
+    let epsHas = false;
+    for (const q of q4) {
+        if (q.eps != null) { epsSum += q.eps; epsHas = true; }
+    }
+    ttm.eps = epsHas ? epsSum : null;
+    ttm.epsdiluted = epsHas ? q4.reduce((s, q) => s + (q.epsdiluted || 0), 0) : null;
+
+    // Balance sheet: latest quarter
+    const bsFields = [
+        'totalAssets', 'totalCurrentAssets', 'totalCurrentLiabilities',
+        'totalLiabilities', 'totalStockholdersEquity', 'totalDebt',
+        'netDebt', 'cashAndCashEquivalents', 'cashAndShortTermInvestments',
+        'shortTermDebt', 'longTermDebt', 'totalEquity',
+        'goodwill', 'intangibleAssets', 'totalInvestments'
+    ];
+    for (const field of bsFields) {
+        ttm[field] = q4[0][field];
+    }
+
+    // Weighted average shares: latest
+    ttm.weightedAverageShsOut = q4[0].weightedAverageShsOut;
+    ttm.weightedAverageShsOutDil = q4[0].weightedAverageShsOutDil;
+
+    return ttm;
+}
+
+// ============================================================
+// FINANCIAL RATIOS
+// ============================================================
+function calcRatios(ttm, profile) {
+    if (!ttm) return {};
+    const r = ttm;
+    const price = profile?.price;
+    const mktCap = profile?.mktCap;
+    const sharesOut = r.weightedAverageShsOutDil || r.weightedAverageShsOut;
+
+    const safe = (a, b) => (a != null && b != null && b !== 0) ? a / b : null;
+
+    return {
+        // Profitability
+        grossMargin: safe(r.grossProfit, r.revenue),
+        operatingMargin: safe(r.operatingIncome, r.revenue),
+        netMargin: safe(r.netIncome, r.revenue),
+        ebitdaMargin: safe(r.ebitda, r.revenue),
+
+        // Returns
+        roe: safe(r.netIncome, r.totalStockholdersEquity),
+        roa: safe(r.netIncome, r.totalAssets),
+        roic: safe(r.operatingIncome, (r.totalStockholdersEquity || 0) + (r.totalDebt || 0) - (r.cashAndCashEquivalents || 0)),
+
+        // Valuation
+        peRatio: safe(price, r.epsdiluted || r.eps),
+        psRatio: safe(mktCap, r.revenue),
+        pbRatio: safe(mktCap, r.totalStockholdersEquity),
+        evToEbitda: r.ebitda ? safe((mktCap || 0) + (r.totalDebt || 0) - (r.cashAndCashEquivalents || 0), r.ebitda) : null,
+        priceToFCF: safe(mktCap, r.freeCashFlow),
+
+        // Efficiency
+        currentRatio: safe(r.totalCurrentAssets, r.totalCurrentLiabilities),
+        debtToEquity: safe(r.totalDebt, r.totalStockholdersEquity),
+        interestCoverage: safe(r.operatingIncome, r.interestExpense),
+        fcfMargin: safe(r.freeCashFlow, r.revenue),
+        fcfYield: safe(r.freeCashFlow, mktCap),
+
+        // Per share
+        eps: r.epsdiluted || r.eps,
+        revenuePerShare: safe(r.revenue, sharesOut),
+        fcfPerShare: safe(r.freeCashFlow, sharesOut),
+    };
+}
+
+// ============================================================
+// RENDER HELPERS
+// ============================================================
+function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.classList.add('active');
+}
+
+function hideError() {
+    document.getElementById('errorMsg').classList.remove('active');
+}
+
+function setLoading(on) {
+    document.getElementById('loading').classList.toggle('active', on);
+    document.getElementById('fetchBtn').disabled = on;
+}
+
+// ============================================================
+// RENDER METRICS CARDS
+// ============================================================
+function renderMetrics(ttm, profile) {
+    const grid = document.getElementById('metricsGrid');
+    const cards = [];
+
+    function addCard(label, value, sub) {
+        let subClass = '';
+        if (sub && sub.startsWith('-')) subClass = ' negative';
+        cards.push(`
+            <div class="metric-card">
+                <div class="label">${label}</div>
+                <div class="value">${value}</div>
+                ${sub ? `<div class="sub${subClass}">${sub}</div>` : ''}
+            </div>
+        `);
+    }
+
+    if (ttm.revenue) {
+        const margin = ttm.netIncome && ttm.revenue ? ((ttm.netIncome / ttm.revenue) * 100).toFixed(1) + '% net margin' : '';
+        addCard('Revenue (TTM)', fmtM(ttm.revenue), margin);
+    }
+    if (ttm.grossProfit) {
+        const gm = ttm.revenue ? ((ttm.grossProfit / ttm.revenue) * 100).toFixed(1) + '%' : '';
+        addCard('Gross Profit', fmtM(ttm.grossProfit), gm);
+    }
+    if (ttm.operatingIncome) {
+        const om = ttm.revenue ? ((ttm.operatingIncome / ttm.revenue) * 100).toFixed(1) + '%' : '';
+        addCard('Operating Income', fmtM(ttm.operatingIncome), om);
+    }
+    if (ttm.netIncome) addCard('Net Income', fmtM(ttm.netIncome));
+    if (ttm.eps || ttm.epsdiluted) addCard('EPS (Diluted)', fmtEps(ttm.epsdiluted || ttm.eps));
+    if (ttm.freeCashFlow) addCard('Free Cash Flow', fmtM(ttm.freeCashFlow));
+    if (ttm.operatingCashFlow) addCard('Operating Cash Flow', fmtM(ttm.operatingCashFlow));
+    if (profile?.mktCap) addCard('Market Cap', fmtB(profile.mktCap));
+
+    grid.innerHTML = cards.join('');
+}
+
+// ============================================================
+// RENDER TABLE
+// ============================================================
+function renderFinancialTable(containerId, rows, periods, ttm) {
+    const container = document.getElementById(containerId);
+    if (!periods || periods.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted)">No data available</p>';
+        return;
+    }
+
+    let html = '<table><thead><tr><th></th>';
+    if (ttm) html += `<th class="ttm-col">TTM</th>`;
+    for (const p of periods) {
+        html += `<th>${p._label || periodLabel(p.date) || p.date || ''}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    for (const row of rows) {
+        html += '<tr>';
+        html += `<td>${row.label}</td>`;
+        if (ttm) {
+            const val = row.format(ttm[row.field]);
+            html += `<td class="ttm-col">${val}</td>`;
+        }
+        for (const p of periods) {
+            html += `<td>${row.format(p[row.field])}</td>`;
+        }
+        html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// ============================================================
+// TABLE DEFINITIONS
+// ============================================================
+const incomeRows = [
+    { label: 'Revenue', field: 'revenue', format: fmtM },
+    { label: 'Cost of Revenue', field: 'costOfRevenue', format: fmtM },
+    { label: 'Gross Profit', field: 'grossProfit', format: fmtM },
+    { label: 'Gross Margin', field: '_grossMargin', format: fmtPct },
+    { label: 'R&D Expenses', field: 'researchAndDevelopmentExpenses', format: fmtM },
+    { label: 'SG&A Expenses', field: 'sellingGeneralAndAdministrativeExpenses', format: fmtM },
+    { label: 'Operating Expenses', field: 'operatingExpenses', format: fmtM },
+    { label: 'Operating Income', field: 'operatingIncome', format: fmtM },
+    { label: 'Operating Margin', field: '_operatingMargin', format: fmtPct },
+    { label: 'Interest Expense', field: 'interestExpense', format: fmtM },
+    { label: 'Income Tax', field: 'incomeTaxExpense', format: fmtM },
+    { label: 'Net Income', field: 'netIncome', format: fmtM },
+    { label: 'Net Margin', field: '_netMargin', format: fmtPct },
+    { label: 'EBITDA', field: 'ebitda', format: fmtM },
+    { label: 'EPS', field: 'eps', format: fmtEps },
+    { label: 'EPS Diluted', field: 'epsdiluted', format: fmtEps },
+    { label: 'Shares Outstanding', field: 'weightedAverageShsOut', format: v => v ? (v / 1e6).toFixed(0) + 'M' : '-' },
+];
+
+const balanceRows = [
+    { label: 'Cash & Equivalents', field: 'cashAndCashEquivalents', format: fmtM },
+    { label: 'Short-Term Investments', field: 'cashAndShortTermInvestments', format: fmtM },
+    { label: 'Current Assets', field: 'totalCurrentAssets', format: fmtM },
+    { label: 'Total Assets', field: 'totalAssets', format: fmtM },
+    { label: 'Current Liabilities', field: 'totalCurrentLiabilities', format: fmtM },
+    { label: 'Short-Term Debt', field: 'shortTermDebt', format: fmtM },
+    { label: 'Long-Term Debt', field: 'longTermDebt', format: fmtM },
+    { label: 'Total Debt', field: 'totalDebt', format: fmtM },
+    { label: 'Total Liabilities', field: 'totalLiabilities', format: fmtM },
+    { label: 'Stockholders Equity', field: 'totalStockholdersEquity', format: fmtM },
+    { label: 'Goodwill', field: 'goodwill', format: fmtM },
+    { label: 'Intangible Assets', field: 'intangibleAssets', format: fmtM },
+    { label: 'Net Debt', field: 'netDebt', format: fmtM },
+];
+
+const cashflowRows = [
+    { label: 'Operating Cash Flow', field: 'operatingCashFlow', format: fmtM },
+    { label: 'Capital Expenditure', field: 'capitalExpenditure', format: fmtM },
+    { label: 'Free Cash Flow', field: 'freeCashFlow', format: fmtM },
+    { label: 'FCF Margin', field: '_fcfMargin', format: fmtPct },
+    { label: 'Dividends Paid', field: 'dividendsPaid', format: fmtM },
+    { label: 'Investing Cash Flow', field: 'netCashUsedForInvestingActivites', format: fmtM },
+    { label: 'Financing Cash Flow', field: 'netCashUsedProvidedByFinancingActivities', format: fmtM },
+    { label: 'D&A', field: 'depreciationAndAmortization', format: fmtM },
+];
+
+// ============================================================
+// ADD COMPUTED FIELDS
+// ============================================================
+function enrichPeriod(p) {
+    if (!p) return p;
+    p._grossMargin = (p.grossProfit != null && p.revenue) ? p.grossProfit / p.revenue : null;
+    p._operatingMargin = (p.operatingIncome != null && p.revenue) ? p.operatingIncome / p.revenue : null;
+    p._netMargin = (p.netIncome != null && p.revenue) ? p.netIncome / p.revenue : null;
+    p._fcfMargin = (p.freeCashFlow != null && p.revenue) ? p.freeCashFlow / p.revenue : null;
+    return p;
+}
+
+// ============================================================
+// RENDER RATIOS
+// ============================================================
+function renderRatios(ratios) {
+    const grid = document.getElementById('ratiosGrid');
+
+    function group(title, items) {
+        let html = `<div class="ratio-group"><h4>${title}</h4>`;
+        for (const [name, val] of items) {
+            html += `<div class="ratio-item"><span class="name">${name}</span><span class="val">${val}</span></div>`;
+        }
+        html += '</div>';
+        return html;
+    }
+
+    let html = '';
+
+    html += group('Profitability', [
+        ['Gross Margin', fmtPct(ratios.grossMargin)],
+        ['Operating Margin', fmtPct(ratios.operatingMargin)],
+        ['Net Margin', fmtPct(ratios.netMargin)],
+        ['EBITDA Margin', fmtPct(ratios.ebitdaMargin)],
+        ['FCF Margin', fmtPct(ratios.fcfMargin)],
+    ]);
+
+    html += group('Returns', [
+        ['ROE', fmtPct(ratios.roe)],
+        ['ROA', fmtPct(ratios.roa)],
+        ['ROIC', fmtPct(ratios.roic)],
+    ]);
+
+    html += group('Valuation', [
+        ['P/E Ratio', fmtRatio(ratios.peRatio)],
+        ['P/S Ratio', fmtRatio(ratios.psRatio)],
+        ['P/B Ratio', fmtRatio(ratios.pbRatio)],
+        ['EV/EBITDA', fmtRatio(ratios.evToEbitda)],
+        ['Price/FCF', fmtRatio(ratios.priceToFCF)],
+        ['FCF Yield', fmtPct(ratios.fcfYield)],
+    ]);
+
+    html += group('Financial Health', [
+        ['Current Ratio', fmtRatio(ratios.currentRatio)],
+        ['Debt/Equity', fmtRatio(ratios.debtToEquity)],
+        ['Interest Coverage', fmtRatio(ratios.interestCoverage)],
+    ]);
+
+    html += group('Per Share', [
+        ['EPS (Diluted)', fmtEps(ratios.eps)],
+        ['Revenue/Share', fmtEps(ratios.revenuePerShare)],
+        ['FCF/Share', fmtEps(ratios.fcfPerShare)],
+    ]);
+
+    grid.innerHTML = html;
+}
+
+// ============================================================
+// RENDER CHARTS
+// ============================================================
+function renderCharts(quarters) {
+    // Destroy previous charts
+    chartInstances.forEach(c => c.destroy());
+    chartInstances = [];
+
+    const data = quarters.slice(0, 12).reverse();
+    const labels = data.map(q => periodLabel(q.date));
+    const revenues = data.map(q => q.revenue ? q.revenue / 1e6 : null);
+    const netIncomes = data.map(q => q.netIncome ? q.netIncome / 1e6 : null);
+    const grossMargins = data.map(q => (q.grossProfit && q.revenue) ? (q.grossProfit / q.revenue * 100) : null);
+    const netMargins = data.map(q => (q.netIncome && q.revenue) ? (q.netIncome / q.revenue * 100) : null);
+    const epsVals = data.map(q => q.epsdiluted || q.eps || null);
+
+    const defaults = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: true, position: 'top' } },
+        scales: {
+            x: { grid: { display: false } },
+            y: { grid: { color: '#f0f0f0' } }
+        }
+    };
+
+    // Revenue chart
+    chartInstances.push(new Chart(document.getElementById('chartRevenue'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Revenue ($M)',
+                data: revenues,
+                backgroundColor: 'rgba(31, 119, 180, 0.7)',
+                borderColor: '#1f77b4',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: { ...defaults, plugins: { ...defaults.plugins, title: { display: true, text: 'Quarterly Revenue' } } }
+    }));
+
+    // Net Income chart
+    chartInstances.push(new Chart(document.getElementById('chartNetIncome'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Net Income ($M)',
+                data: netIncomes,
+                backgroundColor: netIncomes.map(v => v >= 0 ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)'),
+                borderColor: netIncomes.map(v => v >= 0 ? '#28a745' : '#dc3545'),
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: { ...defaults, plugins: { ...defaults.plugins, title: { display: true, text: 'Quarterly Net Income' } } }
+    }));
+
+    // Margins chart
+    chartInstances.push(new Chart(document.getElementById('chartMargins'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Gross Margin %',
+                    data: grossMargins,
+                    borderColor: '#1f77b4',
+                    backgroundColor: 'rgba(31,119,180,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 4
+                },
+                {
+                    label: 'Net Margin %',
+                    data: netMargins,
+                    borderColor: '#ff7f0e',
+                    backgroundColor: 'rgba(255,127,14,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 4
+                }
+            ]
+        },
+        options: { ...defaults, plugins: { ...defaults.plugins, title: { display: true, text: 'Margin Trends' } } }
+    }));
+
+    // EPS chart
+    chartInstances.push(new Chart(document.getElementById('chartEPS'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'EPS (Diluted)',
+                data: epsVals,
+                borderColor: '#2ca02c',
+                backgroundColor: 'rgba(44,160,44,0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 5,
+                pointBackgroundColor: '#2ca02c'
+            }]
+        },
+        options: { ...defaults, plugins: { ...defaults.plugins, title: { display: true, text: 'EPS Trend' } } }
+    }));
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(tabName) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+    document.querySelectorAll('.tab').forEach(t => {
+        if (t.textContent.toLowerCase().replace(/\s/g, '').includes(tabName.replace('-', ''))) {
+            t.classList.add('active');
+        }
+    });
+
+    const tabEl = document.getElementById('tab-' + tabName);
+    if (tabEl) tabEl.classList.add('active');
+
+    // Re-render charts if switching to charts tab (fixes canvas sizing)
+    if (tabName === 'charts' && window._lastQuarters) {
+        setTimeout(() => renderCharts(window._lastQuarters), 50);
+    }
+}
+
+// ============================================================
+// QUICK LOAD
+// ============================================================
+function quickLoad(ticker) {
+    document.getElementById('tickerInput').value = ticker;
+    fetchData();
+}
+
+// ============================================================
+// MAIN FETCH
+// ============================================================
+async function fetchData() {
+    const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+    if (!ticker) return;
+
+    hideError();
+    setLoading(true);
+    document.getElementById('results').classList.remove('active');
+    document.getElementById('welcome').style.display = 'none';
+
+    try {
+        // Fetch all data in parallel
+        const [profileArr, incomeQ, incomeA, balanceQ, balanceA, cashflowQ, cashflowA] = await Promise.all([
+            apiFetch(`/profile/${ticker}`),
+            apiFetch(`/income-statement/${ticker}?period=quarter&limit=12`),
+            apiFetch(`/income-statement/${ticker}?limit=10`),
+            apiFetch(`/balance-sheet-statement/${ticker}?period=quarter&limit=12`),
+            apiFetch(`/balance-sheet-statement/${ticker}?limit=10`),
+            apiFetch(`/cash-flow-statement/${ticker}?period=quarter&limit=12`),
+            apiFetch(`/cash-flow-statement/${ticker}?limit=10`),
+        ]);
+
+        const profile = profileArr?.[0];
+        if (!profile) throw new Error('Ticker not found: ' + ticker);
+
+        // Merge quarterly data (income + balance + cashflow by date)
+        const quarterMap = {};
+        for (const item of (incomeQ || [])) {
+            quarterMap[item.date] = { ...quarterMap[item.date], ...item };
+        }
+        for (const item of (balanceQ || [])) {
+            quarterMap[item.date] = { ...quarterMap[item.date], ...item };
+        }
+        for (const item of (cashflowQ || [])) {
+            quarterMap[item.date] = { ...quarterMap[item.date], ...item };
+        }
+
+        const quarters = Object.keys(quarterMap)
+            .sort((a, b) => b.localeCompare(a))
+            .map(date => {
+                const p = quarterMap[date];
+                p._label = periodLabel(date);
+                return enrichPeriod(p);
+            });
+
+        // Merge annual data
+        const annualMap = {};
+        for (const item of (incomeA || [])) {
+            annualMap[item.date] = { ...annualMap[item.date], ...item };
+        }
+        for (const item of (balanceA || [])) {
+            annualMap[item.date] = { ...annualMap[item.date], ...item };
+        }
+        for (const item of (cashflowA || [])) {
+            annualMap[item.date] = { ...annualMap[item.date], ...item };
+        }
+
+        const annuals = Object.keys(annualMap)
+            .sort((a, b) => b.localeCompare(a))
+            .map(date => {
+                const p = annualMap[date];
+                p._label = date.substring(0, 4); // Year only
+                return enrichPeriod(p);
+            });
+
+        // Calculate TTM
+        const ttm = enrichPeriod(calculateTTM(quarters));
+        window._lastQuarters = quarters;
+
+        // Render company header
+        document.getElementById('companyName').textContent = `${profile.companyName} (${profile.symbol})`;
+        document.getElementById('companyTicker').textContent = profile.exchangeShortName || '';
+        document.getElementById('companySector').textContent = profile.sector || '';
+        document.getElementById('companyPrice').textContent = profile.price ? `Price: $${profile.price.toFixed(2)}` : '';
+        document.getElementById('companyMktCap').textContent = profile.mktCap ? `Market Cap: ${fmtB(profile.mktCap)}` : '';
+
+        // Render metrics
+        renderMetrics(ttm || quarters[0] || {}, profile);
+
+        // Render tables
+        renderFinancialTable('incomeTable', incomeRows, quarters, ttm);
+        renderFinancialTable('incomeTableAnnual', incomeRows, annuals, null);
+        renderFinancialTable('balanceTable', balanceRows, quarters, ttm);
+        renderFinancialTable('balanceTableAnnual', balanceRows, annuals, null);
+        renderFinancialTable('cashflowTable', cashflowRows, quarters, ttm);
+        renderFinancialTable('cashflowTableAnnual', cashflowRows, annuals, null);
+
+        // Render ratios
+        const ratios = calcRatios(ttm, profile);
+        renderRatios(ratios);
+
+        // Render charts
+        renderCharts(quarters);
+
+        // Show results
+        document.getElementById('results').classList.add('active');
+
+        // Switch to income tab
+        switchTab('income');
+
+    } catch (err) {
+        showError('Error: ' + err.message);
+        document.getElementById('welcome').style.display = 'block';
+    } finally {
+        setLoading(false);
+    }
+}
+</script>
+
+</body>
+</html>
